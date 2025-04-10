@@ -1,9 +1,9 @@
 package http
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
-	"time"
 
 	"klinik/azwan/app/usecase"
 	"klinik/azwan/entity"
@@ -21,6 +21,7 @@ func NewAntrianHandler(e *echo.Echo, pu *usecase.AntrianUsecase) {
 	}
 
 	e.GET("/antrians", handler.GetAllAntrians)
+	e.GET("/antrians/query/", handler.SearchingAntrian)
 	e.POST("/antrians", handler.CreateAntrian)
 	e.GET("/antrians/:id", handler.GetAntrianByID)
 	e.PUT("/antrians/update/:id", handler.UpdateAntrian)
@@ -34,20 +35,11 @@ func (h *AntrianHandler) CreateAntrian(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, err.Error())
 	}
 
-	tanggal, err := time.Parse("2006-01-02", input.TanggalBerkunjung)
+	antrian, err := h.AntrianUsecase.CreateAntrian(input)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid date format")
-	}
-
-	antrian := entity.Antrian{
-		Keluhan:           input.Keluhan,
-		PasienID:          input.PasienID,
-		DokterID:          input.DokterID,
-		TanggalBerkunjung: tanggal,
-	}
-
-	err = h.AntrianUsecase.CreateAntrian(&antrian)
-	if err != nil {
+		if errors.Is(err, usecase.ErrInvalidDateFormat) {
+			return c.JSON(http.StatusBadRequest, err.Error())
+		}
 		return c.JSON(http.StatusInternalServerError, err.Error())
 	}
 	return c.JSON(http.StatusCreated, antrian)
@@ -74,10 +66,23 @@ func (h *AntrianHandler) GetAntrianByID(c echo.Context) error {
 	return c.JSON(http.StatusOK, antrians)
 }
 
+func (h *AntrianHandler) SearchingAntrian(c echo.Context) error {
+	searchQuery := c.QueryParam("searching")
+	if searchQuery == "" {
+		return c.JSON(http.StatusBadRequest, "searching query not valid")
+	}
+
+	antrians, err := h.AntrianUsecase.SearchingAntrian(searchQuery)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, err.Error())
+	}
+	return c.JSON(http.StatusOK, antrians)
+}
+
 func (h *AntrianHandler) UpdateAntrian(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid ID")
+		return c.JSON(http.StatusBadRequest, "invalid ID")
 	}
 
 	var input entity.AntrianInput
@@ -85,29 +90,14 @@ func (h *AntrianHandler) UpdateAntrian(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, err.Error())
 	}
 
-	tanggal, err := time.Parse("2006-01-02", input.TanggalBerkunjung)
+	antrian, err := h.AntrianUsecase.UpdateAntrian(id, input)
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, "Invalid date format")
-	}
-
-	getAntrian, err := h.AntrianUsecase.GetAntrianByID(id)
-	if err != nil {
-		return c.JSON(http.StatusNotFound, "Antrian not found")
-	}
-
-	antrian := &entity.Antrian{
-		ID:                getAntrian.ID,
-		NomorAntrian:      getAntrian.NomorAntrian,
-		Keluhan:           input.Keluhan,
-		PasienID:          input.PasienID,
-		DokterID:          input.DokterID,
-		TanggalBerkunjung: tanggal,
-	}
-
-	err = h.AntrianUsecase.UpdateAntrian(antrian)
-	if err != nil {
+		if err == usecase.ErrAntrianNotFound {
+			return c.JSON(http.StatusNotFound, "antrian not found")
+		}
 		return c.JSON(http.StatusInternalServerError, err.Error())
 	}
+
 	return c.JSON(http.StatusOK, antrian)
 }
 

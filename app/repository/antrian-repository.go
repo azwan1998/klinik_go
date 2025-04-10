@@ -48,11 +48,22 @@ func (r *AntrianRepository) DeleteAntrian(id int) error {
 	return r.DB.Delete(&entity.Antrian{}, id).Error
 }
 
-func (ar *AntrianRepository) GetMaxNomorAntrianByDate(tanggal time.Time) (int64, error) {
+func (r *AntrianRepository) GetMaxNomorAntrianByDate(tanggal time.Time) (int64, error) {
 	var maxNomorAntrian int64
-	err := ar.DB.Model(&entity.Antrian{}).
+	err := r.DB.Model(&entity.Antrian{}).
 		Where("tanggal_berkunjung = ?", tanggal).
 		Select("COALESCE(MAX(nomor_antrian), 0)").
 		Row().Scan(&maxNomorAntrian)
 	return maxNomorAntrian, err
+}
+
+func (r *AntrianRepository) SearchingAntrian(searchQuery string) ([]entity.AntrianDetail, error) {
+	var antrian []entity.AntrianDetail
+	err := r.DB.Table("antrians").
+		Select("antrians.*, pasiens.nama as nama_pasien, dokters.nama as nama_dokter").
+		Joins("left join pasiens on pasiens.id = antrians.id_pasien").
+		Joins("left join dokters on dokters.id = antrians.id_dokter").
+		Where("antrians.nomor_antrian ?", "%"+searchQuery+"%").
+		Scan(&antrian).Error
+	return antrian, err
 }
